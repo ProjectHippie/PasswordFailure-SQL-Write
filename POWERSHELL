@@ -1,0 +1,52 @@
+#$user = Get-ADUser -Identity $events.Properties[5].Value | Select-Object
+#$output = Get-Process | Where-Object {$events.Properties.Value[5].Value -eq $user}
+Import-Module SqlServer
+$DC = (Get-ADDomain).PDCEmulator
+$events = Get-WinEvent -ComputerName $DC -FilterHashtable @{
+    LogName = 'Security'
+    ID = 4625
+}
+$SQLServer = "BIGBERTH\HBSQL"
+$SQLDBName = "LOL"
+$UID = "basic"
+$UP = "basic"
+$CSVPath = "C:\Users\hboudreau\Documents\test.csv"
+$CSVDelimiter = ";"
+$connstring = "Server=$SQLServer; Database=$SQLDBName; Integrated Security=True; User ID=$UID; Password=$UP;"
+$conn = New-Object System.Data.SqlClient.SqlConnection($connstring)
+$header = "TargetAccount", "LogonType", "CallingComputer", "IPAddress", "Timelog", "Test"
+
+$LogonType = @{
+            '2' = 'Interactive'
+            '3' = 'Network'
+            '4' = 'Batch'
+            '5' = 'Service'
+            '7' = 'Unlock'
+            '8' = 'Networkcleartext'
+            '9' = 'NewCredentials'
+            '10' = 'RemoteInteractive'
+            '11' = 'CachedInteractive'
+}
+
+
+$SQL = foreach ($event in $events){ 
+                [pscustomobject]@{
+                        TargetAccount = $event.properties.Value[5]
+                        LogonType = $LogonType["$($event.properties.Value[10])"]
+                        CallingComputer = $event.Properties.Value[13]
+                        IPAddress = $event.Properties.Value[19]
+                        Timelog = $event.TimeCreated
+                        Test = $event.Properties.Value[6]
+               }
+}
+
+$SQL | Format-Table -AutoSize
+$SQL | Export-Csv "C:\Users\hboudreau\Documents\test.csv" -Delimiter "," -NoTypeInformation
+$SQLExport = Import-Csv -Path $CSVPath | Write-SqlTableData -ServerInstance $SQLServer -DatabaseName $SQLDBNAME -SchemaName "dbo" -TableName "LOL" -Force
+$SQLExport
+Remove-Item -Path "C:\Users\hboudreau\Documents\test.csv" -Force
+
+$SQLWRITE = Write-SqlTableData -ServerInstance $SQLServer -DatabaseName $SQLDBNAME -SchemaName "dbo" -TableName "Tester" -InputData $CSVPath -Force
+
+             
+            
